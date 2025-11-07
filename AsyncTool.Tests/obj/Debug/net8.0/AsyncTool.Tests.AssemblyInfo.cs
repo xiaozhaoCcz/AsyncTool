@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AsyncTool.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+08bb19c975e5e7393e639ec157c7be152c363cfb")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+cbec14891532e0d75c3374a061a7420f49e67c0d")]
 [assembly: System.Reflection.AssemblyProductAttribute("AsyncTool.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AsyncTool.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

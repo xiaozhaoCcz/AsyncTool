@@ -199,17 +199,19 @@ var options = new AsyncOptions
 };
 
 // 构建依赖关系（共 10 个任务）
-loadConfig.Next(loadUsers);
-loadConfig.Next(loadOrders);
-loadUsers.Next(mergeData);
-loadOrders.Next(mergeData);
-loadUsers.Next(archiveRaw);
-mergeData.Next(trainModel);
-trainModel.Next(generateReport);
-trainModel.Next(cleanupTemp);
-generateReport.Next(notifyTeam);
-generateReport.Next(auditLog);
-cleanupTemp.Next(auditLog);
+WorkJobLinker.Link(
+    (loadConfig, loadUsers, true),
+    (loadConfig, loadOrders, true),
+    (loadUsers, mergeData, true),
+    (loadOrders, mergeData, true),
+    (loadUsers, archiveRaw, true),
+    (mergeData, trainModel, true),
+    (trainModel, generateReport, true),
+    (trainModel, cleanupTemp, true),
+    (generateReport, notifyTeam, true),
+    (generateReport, auditLog, true),
+    (cleanupTemp, auditLog, true)
+);
 
 var allJobs = new List<WorkJob>
 {
