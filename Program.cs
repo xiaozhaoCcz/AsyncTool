@@ -4,10 +4,12 @@ using System.Threading.Tasks;
 using AsyncTool;
 using AsyncTool.Infrastructure;
 using AsyncTool.Jobs;
+using AsyncTool.Options;
 using AsyncTool.Results;
 
 var loadConfig = WorkJob.CreateBuilder()
     .WithId("load-config")
+    .WithPriority(100)
     .WithWork(async () =>
     {
         Console.WriteLine("[load-config] 开始加载配置...");
@@ -24,6 +26,7 @@ var loadConfig = WorkJob.CreateBuilder()
 
 var loadUsers = WorkJob.CreateBuilder()
     .WithId("load-users")
+    .WithPriority(90)
     .WithWork(async () =>
     {
         Console.WriteLine("[load-users] 开始拉取用户数据...");
@@ -40,6 +43,7 @@ var loadUsers = WorkJob.CreateBuilder()
 
 var loadOrders = WorkJob.CreateBuilder()
     .WithId("load-orders")
+    .WithPriority(80)
     .WithWork(async () =>
     {
         Console.WriteLine("[load-orders] 开始拉取订单数据...");
@@ -56,6 +60,7 @@ var loadOrders = WorkJob.CreateBuilder()
 
 var mergeData = WorkJob.CreateBuilder()
     .WithId("merge-data")
+    .WithPriority(70)
     .WithWork(async () =>
     {
         Console.WriteLine("[merge-data] 开始数据合并...");
@@ -73,6 +78,7 @@ var mergeData = WorkJob.CreateBuilder()
 var trainingAttempts = 0;
 var trainModel = WorkJob.CreateBuilder()
     .WithId("train-model")
+    .WithPriority(60)
     .WithRetry(2)
     .WithWork(async () =>
     {
@@ -98,6 +104,7 @@ var trainModel = WorkJob.CreateBuilder()
 
 var generateReport = WorkJob.CreateBuilder()
     .WithId("generate-report")
+    .WithPriority(50)
     .WithTimeout(2000)
     .WithWork(async () =>
     {
@@ -115,6 +122,7 @@ var generateReport = WorkJob.CreateBuilder()
 
 var notifyTeam = WorkJob.CreateBuilder()
     .WithId("notify-team")
+    .WithPriority(40)
     .WithWork(async () =>
     {
         Console.WriteLine("[notify-team] 开始通知团队...");
@@ -132,6 +140,7 @@ var notifyTeam = WorkJob.CreateBuilder()
 
 var archiveRaw = WorkJob.CreateBuilder()
     .WithId("archive-raw")
+    .WithPriority(55)
     .WithParam("oss://raw-bucket")
     .WithWork(async destination =>
     {
@@ -149,6 +158,7 @@ var archiveRaw = WorkJob.CreateBuilder()
 
 var cleanupTemp = WorkJob.CreateBuilder()
     .WithId("cleanup-temp")
+    .WithPriority(45)
     .WithWork(async () =>
     {
         Console.WriteLine("[cleanup-temp] 开始清理临时文件...");
@@ -165,6 +175,7 @@ var cleanupTemp = WorkJob.CreateBuilder()
 
 var auditLog = WorkJob.CreateBuilder()
     .WithId("audit-log")
+    .WithPriority(30)
     .WithWork(async () =>
     {
         Console.WriteLine("[audit-log] 开始写入审计日志...");
@@ -178,6 +189,14 @@ var auditLog = WorkJob.CreateBuilder()
         return (object)"audit:ok";
     })
     .Build();
+
+var options = new AsyncOptions
+{
+    MaxDegreeOfParallelism = 3,
+    OnJobStarted = job => Console.WriteLine($"[event] {job.WorkJobId} started"),
+    OnJobCompleted = job => Console.WriteLine($"[event] {job.WorkJobId} completed"),
+    OnJobFailed = (job, ex) => Console.WriteLine($"[event] {job.WorkJobId} failed: {ex.Message}")
+};
 
 // 构建依赖关系（共 10 个任务）
 loadConfig.Next(loadUsers);
@@ -208,7 +227,7 @@ var allJobs = new List<WorkJob>
 
 try
 {
-    var asyncId = Async.Start(new[] { loadConfig }, timeoutMilliseconds: 8000);
+    var asyncId = Async.Start(new[] { loadConfig }, timeoutMilliseconds: 8000, options);
 
     Console.WriteLine($"任务组启动完成，Id: {asyncId}");
     Console.WriteLine("--- 结果汇总 ---");
@@ -222,7 +241,7 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"任务组执行失败: {ex.Message}");
+    Console.WriteLine($"任务组执行失败: {ex}");
 }
 finally
 {

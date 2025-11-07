@@ -5,13 +5,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using AsyncTool.Infrastructure;
 using AsyncTool.Jobs;
+using AsyncTool.Options;
 using AsyncTool.Results;
 
 namespace AsyncTool
 {
     public static class Async
     {
-        public static async Task<string> StartAsync(IEnumerable<WorkJob> workJobs, long timeoutMilliseconds)
+        public static async Task<string> StartAsync(IEnumerable<WorkJob> workJobs, long timeoutMilliseconds, AsyncOptions? options = null)
         {
             if (workJobs == null)
             {
@@ -31,13 +32,16 @@ namespace AsyncTool
 
             var asId = AsyncUtil.Generate12Digit();
             var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMilliseconds));
+            var limiter = options?.MaxDegreeOfParallelism > 0
+                ? new SemaphoreSlim(options.MaxDegreeOfParallelism)
+                : null;
 
             AsyncUtil.AddToken(asId, cts);
             AsyncUtil.AddWorkJobs(asId, workJobList);
 
             try
             {
-                await BeginAsync(asId, workJobList, cts.Token, timeoutMilliseconds).ConfigureAwait(false);
+                await BeginAsync(asId, workJobList, cts.Token, timeoutMilliseconds, options, limiter).ConfigureAwait(false);
                 return asId;
             }
             catch
@@ -45,14 +49,24 @@ namespace AsyncTool
                 Stop(asId);
                 throw;
             }
+            finally
+            {
+                limiter?.Dispose();
+            }
         }
 
-        public static string Start(IEnumerable<WorkJob> workJobs, long timeoutMilliseconds)
+        public static string Start(IEnumerable<WorkJob> workJobs, long timeoutMilliseconds, AsyncOptions? options = null)
         {
-            return StartAsync(workJobs, timeoutMilliseconds).GetAwaiter().GetResult();
+            return StartAsync(workJobs, timeoutMilliseconds, options).GetAwaiter().GetResult();
         }
 
-        public static async Task BeginAsync(string asId, IEnumerable<WorkJob> workJobs, CancellationToken token, long timeoutMilliseconds)
+        public static async Task BeginAsync(
+            string asId,
+            IEnumerable<WorkJob> workJobs,
+            CancellationToken token,
+            long timeoutMilliseconds,
+            AsyncOptions? options = null,
+            SemaphoreSlim? limiter = null)
         {
             if (timeoutMilliseconds <= 0)
             {
@@ -60,48 +74,73 @@ namespace AsyncTool
                 throw new TimeoutException("异步任务超时。");
             }
 
-            var tasks = new List<Task>();
+            var orderedJobs = workJobs
+                .OrderByDescending(job => job.Priority)
+                .ThenBy(job => job.WorkJobId)
+                .ToList();
 
-            foreach (var workJob in workJobs)
-            {
-                token.ThrowIfCancellationRequested();
-                tasks.Add(ExecuteJobAndChildrenAsync(asId, workJob, token, timeoutMilliseconds));
-            }
-
-            if (tasks.Count == 0)
+            if (orderedJobs.Count == 0)
             {
                 return;
+            }
+
+            var tasks = new List<Task>(orderedJobs.Count);
+
+            foreach (var workJob in orderedJobs)
+            {
+                token.ThrowIfCancellationRequested();
+                tasks.Add(ExecuteJobAndChildrenAsync(asId, workJob, token, timeoutMilliseconds, options, limiter));
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
-        public static async Task ExecuteJobAndChildrenAsync(string asId, WorkJob workJob, CancellationToken token, long timeoutMilliseconds)
+        public static async Task ExecuteJobAndChildrenAsync(
+            string asId,
+            WorkJob workJob,
+            CancellationToken token,
+            long timeoutMilliseconds,
+            AsyncOptions? options = null,
+            SemaphoreSlim? limiter = null)
         {
             token.ThrowIfCancellationRequested();
 
-            var startTime = DateTimeOffset.UtcNow;
-            await workJob.DoWorkAsync(asId).ConfigureAwait(false);
-            token.ThrowIfCancellationRequested();
-
-            var elapsed = (long)(DateTimeOffset.UtcNow - startTime).TotalMilliseconds;
-            var remainingTimeout = timeoutMilliseconds - elapsed;
-
-            if (remainingTimeout <= 0)
+            if (limiter != null)
             {
-                Stop(asId);
-                throw new TimeoutException("异步任务执行超时。");
+                await limiter.WaitAsync(token).ConfigureAwait(false);
             }
 
-            if (workJob.Status == WorkJobStatus.Failed)
+            long remainingTimeout = timeoutMilliseconds;
+
+            try
             {
-                Stop(asId);
-                throw new Exception("工作任务执行失败。");
+                var startTime = DateTimeOffset.UtcNow;
+                await workJob.DoWorkAsync(asId, options).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+
+                var elapsed = (long)(DateTimeOffset.UtcNow - startTime).TotalMilliseconds;
+                remainingTimeout = timeoutMilliseconds - elapsed;
+
+                if (remainingTimeout <= 0)
+                {
+                    Stop(asId);
+                    throw new TimeoutException("异步任务执行超时。");
+                }
+
+                if (workJob.Status == WorkJobStatus.Failed)
+                {
+                    Stop(asId);
+                    throw new Exception($"工作任务 {workJob.WorkJobId} 执行失败。");
+                }
+            }
+            finally
+            {
+                limiter?.Release();
             }
 
             if (workJob.Status == WorkJobStatus.Finish && workJob.NextWorkJobs.Count > 0)
             {
-                await BeginAsync(asId, workJob.NextWorkJobs, token, remainingTimeout).ConfigureAwait(false);
+                await BeginAsync(asId, workJob.NextWorkJobs, token, remainingTimeout, options, limiter).ConfigureAwait(false);
             }
         }
 

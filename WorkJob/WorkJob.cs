@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AsyncTool.Infrastructure;
+using AsyncTool.Options;
 using AsyncTool.Results;
 
 namespace AsyncTool.Jobs
@@ -57,6 +58,12 @@ namespace AsyncTool.Jobs
                 return this;
             }
 
+            public Builder WithPriority(int priority)
+            {
+                _job._priority = priority;
+                return this;
+            }
+
             public WorkJob Build()
             {
                 if (string.IsNullOrWhiteSpace(_job._workJobId))
@@ -88,6 +95,7 @@ namespace AsyncTool.Jobs
         private object? _result;
         private int? _timeout;
         private int _retryCount;
+        private int _priority;
         private volatile int _status = (int)WorkJobStatus.Start;
         private string? _workJobId;
         private string? _asId;
@@ -103,6 +111,8 @@ namespace AsyncTool.Jobs
         public IReadOnlyList<WorkJob> DependsOnWorkJobs => _dependsOnWorkJobs;
 
         public string? WorkJobId => _workJobId;
+
+        public int Priority => _priority;
 
         public WorkJob Id(string workId)
         {
@@ -139,6 +149,12 @@ namespace AsyncTool.Jobs
         public WorkJob Retry(int count)
         {
             _retryCount = Math.Max(0, count);
+            return this;
+        }
+
+        public WorkJob PriorityLevel(int priority)
+        {
+            _priority = priority;
             return this;
         }
 
@@ -196,7 +212,7 @@ namespace AsyncTool.Jobs
             ChangeStatus(WorkJobStatus.Failed);
         }
 
-        public Task DoWorkAsync(string asId)
+        public Task DoWorkAsync(string asId, AsyncOptions? options)
         {
             _asId = asId;
 
@@ -210,6 +226,7 @@ namespace AsyncTool.Jobs
                 if (Status == WorkJobStatus.Failed)
                 {
                     PropagateFailure();
+                    options?.OnJobFailed?.Invoke(this, new InvalidOperationException("任务已处于失败状态"));
                     return Task.CompletedTask;
                 }
 
@@ -218,6 +235,7 @@ namespace AsyncTool.Jobs
                     if (job.Status == WorkJobStatus.Failed)
                     {
                         ChangeStatus(WorkJobStatus.Failed);
+                        options?.OnJobFailed?.Invoke(this, new InvalidOperationException($"依赖任务 {job.WorkJobId} 失败"));
                         return Task.CompletedTask;
                     }
 
@@ -228,16 +246,17 @@ namespace AsyncTool.Jobs
                 }
             }
 
-            return DoJobAsync();
+            return DoJobAsync(options);
         }
 
-        private async Task DoJobAsync()
+        private async Task DoJobAsync(AsyncOptions? options)
         {
             if (Status != WorkJobStatus.Start)
             {
                 return;
             }
 
+            options?.OnJobStarted?.Invoke(this);
             ChangeStatus(WorkJobStatus.Running);
 
             var currentRetry = 0;
@@ -281,6 +300,7 @@ namespace AsyncTool.Jobs
                     ChangeStatus(WorkJobStatus.Finish);
 
                     SaveResult(_result);
+                    options?.OnJobCompleted?.Invoke(this);
                     return;
                 }
                 catch (OperationCanceledException ex)
@@ -307,7 +327,10 @@ namespace AsyncTool.Jobs
 
             ChangeStatus(WorkJobStatus.Failed);
             PropagateFailure();
-            SaveResult(lastException ?? new Exception("任务执行失败"));
+
+            var failure = lastException ?? new Exception("任务执行失败");
+            SaveResult(failure);
+            options?.OnJobFailed?.Invoke(this, failure);
         }
 
         private void PropagateFailure()
