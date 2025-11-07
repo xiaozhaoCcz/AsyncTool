@@ -7,6 +7,8 @@ using AsyncTool.Jobs;
 using AsyncTool.Options;
 using AsyncTool.Results;
 
+// 演示：构建一个包含 10 个节点的复杂任务流，涵盖优先级、并行度、重试、超时与结果收集。
+// 每个任务均通过 WorkJob Builder 定义，最终由 Async.Start 统一调度执行。
 var loadConfig = WorkJob.CreateBuilder()
     .WithId("load-config")
     .WithPriority(100)
@@ -190,6 +192,7 @@ var auditLog = WorkJob.CreateBuilder()
     })
     .Build();
 
+// 辅助工具：统一控制并发量，监听任务事件，便于观察运行过程。
 var options = new AsyncOptions
 {
     MaxDegreeOfParallelism = 3,
@@ -213,6 +216,7 @@ WorkJobLinker.Link(
     (cleanupTemp, auditLog, true)
 );
 
+// 汇总所有任务，方便结果打印或后续扩展。
 var allJobs = new List<WorkJob>
 {
     loadConfig,

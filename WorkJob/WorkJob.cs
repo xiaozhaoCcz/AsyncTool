@@ -8,6 +8,9 @@ using AsyncTool.Results;
 
 namespace AsyncTool.Jobs
 {
+    /// <summary>
+    /// 表示单个任务在调度过程中的生命周期状态。
+    /// </summary>
     public enum WorkJobStatus
     {
         Start = 0,
@@ -16,54 +19,84 @@ namespace AsyncTool.Jobs
         Failed = 3
     }
 
+    /// <summary>
+    /// 描述单个可调度任务，支持配置优先级、重试、超时、参数与依赖关系。
+    /// </summary>
     public class WorkJob
     {
+        /// <summary>
+        /// 构建 WorkJob 的建造者，提供流式 API 定义任务行为。
+        /// </summary>
         public sealed class Builder
         {
             private readonly WorkJob _job = new();
 
+            /// <summary>
+            /// 指定任务唯一 Id。
+            /// </summary>
             public Builder WithId(string workId)
             {
                 _job.Id(workId);
                 return this;
             }
 
+            /// <summary>
+            /// 指定无参的任务委托。
+            /// </summary>
             public Builder WithWork(Func<Task<object>> func)
             {
                 _job.Work(func);
                 return this;
             }
 
+            /// <summary>
+            /// 指定带参数的任务委托。
+            /// </summary>
             public Builder WithWork(Func<object, Task<object>> func)
             {
                 _job.Work(func);
                 return this;
             }
 
+            /// <summary>
+            /// 设置执行时需要的参数对象。
+            /// </summary>
             public Builder WithParam(object param)
             {
                 _job.Param(param);
                 return this;
             }
 
+            /// <summary>
+            /// 设置单次执行的超时时间（毫秒）。
+            /// </summary>
             public Builder WithTimeout(int milliseconds)
             {
                 _job.Timeout(milliseconds);
                 return this;
             }
 
+            /// <summary>
+            /// 设置失败后的最大重试次数。
+            /// </summary>
             public Builder WithRetry(int count)
             {
                 _job.Retry(count);
                 return this;
             }
 
+            /// <summary>
+            /// 设置调度时的优先级（数值越大优先级越高）。
+            /// </summary>
             public Builder WithPriority(int priority)
             {
                 _job._priority = priority;
                 return this;
             }
 
+            /// <summary>
+            /// 构建最终的 <see cref="WorkJob"/> 实例。
+            /// </summary>
             public WorkJob Build()
             {
                 if (string.IsNullOrWhiteSpace(_job._workJobId))
@@ -80,6 +113,9 @@ namespace AsyncTool.Jobs
             }
         }
 
+        /// <summary>
+        /// 创建一个新的建造者实例。
+        /// </summary>
         public static Builder CreateBuilder()
         {
             return new Builder();
@@ -104,22 +140,43 @@ namespace AsyncTool.Jobs
         {
         }
 
+        /// <summary>
+        /// 当前任务的运行状态。
+        /// </summary>
         public WorkJobStatus Status => (WorkJobStatus)_status;
 
+        /// <summary>
+        /// 子任务集合（执行完成后即将触发的任务）。
+        /// </summary>
         public IReadOnlyList<WorkJob> NextWorkJobs => _nextWorkJobs;
 
+        /// <summary>
+        /// 依赖任务集合（该任务开始前必须完成的任务）。
+        /// </summary>
         public IReadOnlyList<WorkJob> DependsOnWorkJobs => _dependsOnWorkJobs;
 
+        /// <summary>
+        /// 任务唯一 Id。
+        /// </summary>
         public string? WorkJobId => _workJobId;
 
+        /// <summary>
+        /// 调度优先级，数值越大越优先执行。
+        /// </summary>
         public int Priority => _priority;
 
+        /// <summary>
+        /// 设置任务 Id。
+        /// </summary>
         public WorkJob Id(string workId)
         {
             _workJobId = workId;
             return this;
         }
 
+        /// <summary>
+        /// 配置带参数的执行委托。
+        /// </summary>
         public WorkJob Work(Func<object, Task<object>> func)
         {
             _funcWithParam = func ?? throw new ArgumentNullException(nameof(func));
@@ -127,6 +184,9 @@ namespace AsyncTool.Jobs
             return this;
         }
 
+        /// <summary>
+        /// 配置无参执行委托。
+        /// </summary>
         public WorkJob Work(Func<Task<object>> func)
         {
             _funcWithoutParam = func ?? throw new ArgumentNullException(nameof(func));
@@ -134,30 +194,45 @@ namespace AsyncTool.Jobs
             return this;
         }
 
+        /// <summary>
+        /// 传入执行参数。
+        /// </summary>
         public WorkJob Param(object param)
         {
             _param = param;
             return this;
         }
 
+        /// <summary>
+        /// 配置超时时间（毫秒）。
+        /// </summary>
         public WorkJob Timeout(int milliseconds)
         {
             _timeout = milliseconds;
             return this;
         }
 
+        /// <summary>
+        /// 配置最大重试次数。
+        /// </summary>
         public WorkJob Retry(int count)
         {
             _retryCount = Math.Max(0, count);
             return this;
         }
 
+        /// <summary>
+        /// 直接设置优先级（供 Builder 外部调用）。
+        /// </summary>
         public WorkJob PriorityLevel(int priority)
         {
             _priority = priority;
             return this;
         }
 
+        /// <summary>
+        /// 建立强依赖的子任务。
+        /// </summary>
         public WorkJob Next(WorkJob job, bool isMust)
         {
             if (job == null)
@@ -174,6 +249,9 @@ namespace AsyncTool.Jobs
             return this;
         }
 
+        /// <summary>
+        /// 建立强依赖的单个子任务。
+        /// </summary>
         public WorkJob Next(WorkJob job)
         {
             if (job == null)
@@ -186,6 +264,9 @@ namespace AsyncTool.Jobs
             return this;
         }
 
+        /// <summary>
+        /// 为多个子任务建立强依赖。
+        /// </summary>
         public WorkJob Next(params WorkJob[] jobs)
         {
             if (jobs == null)
@@ -207,11 +288,17 @@ namespace AsyncTool.Jobs
             return this;
         }
 
+        /// <summary>
+        /// 将任务状态标记为失败，用于停止流程。
+        /// </summary>
         public void Stop()
         {
             ChangeStatus(WorkJobStatus.Failed);
         }
 
+        /// <summary>
+        /// 调度入口：在满足依赖的情况下执行任务。
+        /// </summary>
         public Task DoWorkAsync(string asId, AsyncOptions? options)
         {
             _asId = asId;
@@ -249,6 +336,9 @@ namespace AsyncTool.Jobs
             return DoJobAsync(options);
         }
 
+        /// <summary>
+        /// 真正的执行逻辑，包含超时、重试、结果写入与事件触发。
+        /// </summary>
         private async Task DoJobAsync(AsyncOptions? options)
         {
             if (Status != WorkJobStatus.Start)
@@ -333,6 +423,9 @@ namespace AsyncTool.Jobs
             options?.OnJobFailed?.Invoke(this, failure);
         }
 
+        /// <summary>
+        /// 将失败状态向下游任务传播。
+        /// </summary>
         private void PropagateFailure()
         {
             foreach (var job in _nextWorkJobs)
@@ -341,6 +434,9 @@ namespace AsyncTool.Jobs
             }
         }
 
+        /// <summary>
+        /// 将任务执行结果（或异常）写入全局结果存储。
+        /// </summary>
         private void SaveResult(object? value)
         {
             if (!string.IsNullOrEmpty(_asId) && !string.IsNullOrEmpty(_workJobId) && value != null)
@@ -349,6 +445,9 @@ namespace AsyncTool.Jobs
             }
         }
 
+        /// <summary>
+        /// 执行带参数委托并应用超时限制。
+        /// </summary>
         private static async Task<object> ExecuteJobTimeoutAsync(Func<object, Task<object>> func, int timeout, object param)
         {
             using var cts = new CancellationTokenSource(timeout);
@@ -363,6 +462,9 @@ namespace AsyncTool.Jobs
             }
         }
 
+        /// <summary>
+        /// 执行无参委托并应用超时限制。
+        /// </summary>
         private static async Task<object> ExecuteJobTimeoutAsync(Func<Task<object>> func, int timeout)
         {
             using var cts = new CancellationTokenSource(timeout);
@@ -377,6 +479,9 @@ namespace AsyncTool.Jobs
             }
         }
 
+        /// <summary>
+        /// 更新内部状态字段。
+        /// </summary>
         private void ChangeStatus(WorkJobStatus status)
         {
             Interlocked.Exchange(ref _status, (int)status);

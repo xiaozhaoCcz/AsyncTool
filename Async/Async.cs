@@ -10,8 +10,17 @@ using AsyncTool.Results;
 
 namespace AsyncTool
 {
+    /// <summary>
+    /// 负责 orchestrating <see cref="WorkJob"/> 的调度器，提供启动、并发控制、超时处理等功能。
+    /// </summary>
     public static class Async
     {
+        /// <summary>
+        /// 异步启动一批任务。
+        /// </summary>
+        /// <param name="workJobs">根任务集合。</param>
+        /// <param name="timeoutMilliseconds">整体超时时间。</param>
+        /// <param name="options">并发与事件钩子配置。</param>
         public static async Task<string> StartAsync(IEnumerable<WorkJob> workJobs, long timeoutMilliseconds, AsyncOptions? options = null)
         {
             if (workJobs == null)
@@ -55,11 +64,17 @@ namespace AsyncTool
             }
         }
 
+        /// <summary>
+        /// 同步启动任务，内部调用 <see cref="StartAsync"/>。
+        /// </summary>
         public static string Start(IEnumerable<WorkJob> workJobs, long timeoutMilliseconds, AsyncOptions? options = null)
         {
             return StartAsync(workJobs, timeoutMilliseconds, options).GetAwaiter().GetResult();
         }
 
+        /// <summary>
+        /// 递归遍历任务树，负责按优先级与并发控制执行每个节点。
+        /// </summary>
         public static async Task BeginAsync(
             string asId,
             IEnumerable<WorkJob> workJobs,
@@ -95,6 +110,9 @@ namespace AsyncTool
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// 执行单个任务，并在成功后递归调度子任务。
+        /// </summary>
         public static async Task ExecuteJobAndChildrenAsync(
             string asId,
             WorkJob workJob,
@@ -144,6 +162,9 @@ namespace AsyncTool
             }
         }
 
+        /// <summary>
+        /// 停止指定异步任务组，同时清理令牌、任务缓存与结果。
+        /// </summary>
         public static void Stop(string asId)
         {
             try

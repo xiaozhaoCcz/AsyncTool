@@ -3,6 +3,9 @@ using AsyncTool.Jobs;
 
 namespace AsyncTool.Options
 {
+    /// <summary>
+    /// 调度配置项，控制任务并行度并暴露生命周期事件。
+    /// </summary>
     public class AsyncOptions
     {
         /// <summary>
