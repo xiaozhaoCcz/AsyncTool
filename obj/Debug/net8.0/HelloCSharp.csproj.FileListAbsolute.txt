@@ -1,0 +1,14 @@
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/bin/Debug/net8.0/HelloCSharp
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/bin/Debug/net8.0/HelloCSharp.deps.json
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/bin/Debug/net8.0/HelloCSharp.runtimeconfig.json
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/bin/Debug/net8.0/HelloCSharp.dll
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/bin/Debug/net8.0/HelloCSharp.pdb
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/obj/Debug/net8.0/HelloCSharp.GeneratedMSBuildEditorConfig.editorconfig
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/obj/Debug/net8.0/HelloCSharp.AssemblyInfoInputs.cache
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/obj/Debug/net8.0/HelloCSharp.AssemblyInfo.cs
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/obj/Debug/net8.0/HelloCSharp.csproj.CoreCompileInputs.cache
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/obj/Debug/net8.0/HelloCSharp.dll
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/obj/Debug/net8.0/refint/HelloCSharp.dll
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/obj/Debug/net8.0/HelloCSharp.pdb
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/obj/Debug/net8.0/HelloCSharp.genruntimeconfig.cache
+/Users/xiaozhao/Desktop/xz/async-tool/HelloCSharp/obj/Debug/net8.0/ref/HelloCSharp.dll
