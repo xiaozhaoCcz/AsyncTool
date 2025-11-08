@@ -1,6 +1,6 @@
-# AsyncTool 项目文档
+# ⚙️ AsyncTool 项目文档
 
-> 异步任务调度工具，支持任务依赖、超时、重试、结果收集等功能，适合在服务端或桌面应用中快速构建复杂的任务流水线。
+> 🧰 异步任务调度工具，支持任务依赖、超时、重试、结果收集等功能，适合在服务端或桌面应用中快速构建复杂的任务流水线。
 
 ```
 ┌────────────┐      ┌────────────┐      ┌────────────┐
@@ -12,9 +12,11 @@
         └── 构建任务节点及依赖
 ```
 
+> 🔗 运行示意：`@README.md (5-13)` 展示了任务建造器、调度器与结果存储之间的关系，可作为下面运行示例的流程参照。
+
 ---
 
-## 📦 项目结构
+## 🗂️ 项目结构
 
 | 模块 | 路径 | 说明 |
 | --- | --- | --- |
@@ -34,7 +36,13 @@ dotnet build
 # 运行示例（Program.cs）
 dotnet run
 ```
-program.cs例子毕竟复杂，下面有介绍简单的例子
+
+## ▶️ 运行流程示例
+
+1. 🧱 **准备阶段**：根任务通过 `WorkJob.CreateBuilder()` 定义（参照 `@README.md (5-13)` 中左侧建造器节点），配置 Id、优先级等元数据。
+2. 🚦 **调度阶段**：调用 `Async.Start` 后，调度器会根据依赖关系和优先级分发任务（对应 `@README.md (5-13)` 中的中间节点）。
+3. 📥 **结果汇总**：每个任务完成后都会调用 `WorkJobResult.AddResult` 写入缓存，即便返回 `null` 也会记录，最终可在示例程序末尾统一打印（参考 `@README.md (5-13)` 的右侧结果存储节点）。
+program.cs例子比较复杂，下面有介绍简单的例子
 ```c#
 // 演示：构建一个包含 10 个节点的复杂任务流，涵盖优先级、并行度、重试、超时与结果收集。
 // 每个任务均通过 WorkJob Builder 定义，最终由 Async.Start 统一调度执行。
@@ -92,9 +100,15 @@ var loadOrders = WorkJob.CreateBuilder()
 var mergeData = WorkJob.CreateBuilder()
     .WithId("merge-data")
     .WithPriority(70)
-    .WithWork(async () =>
+    .WithWork(async context =>
     {
+        context.TryGetDependencyResult("load-users", out var usersResult);
+        context.TryGetDependencyResult("load-orders", out var ordersResult);
+        var usersSummary = usersResult?.ToString() ?? "null";
+        var ordersSummary = ordersResult?.ToString() ?? "null";
+
         Console.WriteLine("[merge-data] 开始数据合并...");
+        Console.WriteLine($"[merge-data] 依赖结果 -> load-users: {usersSummary}, load-orders: {ordersSummary}");
         for (var stage = 1; stage <= 3; stage++)
         {
             await Task.Delay(90);
@@ -102,9 +116,18 @@ var mergeData = WorkJob.CreateBuilder()
         }
 
         Console.WriteLine("[merge-data] 数据合并完成");
-        return (object)"merged:ok";
+        return (object)$"merged:{usersSummary}+{ordersSummary}";
     })
     .Build();
+
+> **提示**  
+> `WithWork(Func<WorkJobExecutionContext, Task<object>>)` 会在执行时注入 `WorkJobExecutionContext`，其中包含：
+> - `Param`：通过 `WithParam` 设置的自定义参数；
+> - `DependencyResults`：以依赖任务 Id 为键的结果字典；
+> - `DependencyValues`：依赖结果的顺序列表，与依赖声明顺序一致；
+> - `TryGetDependencyResult(string workJobId, out object result)`：便捷地根据任务 Id 获取结果。
+>
+> 当任务依赖两个节点时，上下文中即可获得两个结果；依赖三个节点则可以获得三个结果。即使依赖任务返回 `null`，结果也会被记录并可正常读取。
 
 var trainingAttempts = 0;
 var trainModel = WorkJob.CreateBuilder()

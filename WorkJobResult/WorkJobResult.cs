@@ -8,13 +8,14 @@ namespace AsyncTool.Results
     public static class WorkJobResult
     {
         private static readonly ConcurrentDictionary<string, object> _results = new();
+        private static readonly object NullPlaceholder = new();
 
         /// <summary>
         /// 写入或更新指定任务的执行结果。
         /// </summary>
-        public static void AddResult(string id, object result)
+        public static void AddResult(string id, object? result)
         {
-            _results[id] = result;
+            _results[id] = result ?? NullPlaceholder;
         }
 
         /// <summary>
@@ -22,8 +23,12 @@ namespace AsyncTool.Results
         /// </summary>
         public static object? GetResult(string id)
         {
-            _results.TryGetValue(id, out var value);
-            return value;
+            if (_results.TryGetValue(id, out var value))
+            {
+                return ReferenceEquals(value, NullPlaceholder) ? null : value;
+            }
+
+            return null;
         }
 
         /// <summary>

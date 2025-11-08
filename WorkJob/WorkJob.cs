@@ -50,6 +50,15 @@ namespace AsyncTool.Jobs
             }
 
             /// <summary>
+            /// 指定可访问依赖结果的任务委托。
+            /// </summary>
+            public Builder WithWork(Func<WorkJobExecutionContext, Task<object>> func)
+            {
+                _job.Work(func);
+                return this;
+            }
+
+            /// <summary>
             /// 指定带参数的任务委托。
             /// </summary>
             public Builder WithWork(Func<object, Task<object>> func)
@@ -104,7 +113,7 @@ namespace AsyncTool.Jobs
                     throw new InvalidOperationException("WorkJob 必须指定 Id。");
                 }
 
-                if (_job._funcWithParam is null && _job._funcWithoutParam is null)
+                if (_job._funcWithContext is null && _job._funcWithParam is null && _job._funcWithoutParam is null)
                 {
                     throw new InvalidOperationException("WorkJob 必须配置至少一个执行委托。");
                 }
@@ -125,6 +134,7 @@ namespace AsyncTool.Jobs
         private readonly List<WorkJob> _nextWorkJobs = [];
         private readonly object _lock = new();
 
+        private Func<WorkJobExecutionContext, Task<object>>? _funcWithContext;
         private Func<object, Task<object>>? _funcWithParam;
         private Func<Task<object>>? _funcWithoutParam;
         private object? _param;
@@ -180,6 +190,18 @@ namespace AsyncTool.Jobs
         public WorkJob Work(Func<object, Task<object>> func)
         {
             _funcWithParam = func ?? throw new ArgumentNullException(nameof(func));
+            _funcWithContext = null;
+            _funcWithoutParam = null;
+            return this;
+        }
+
+        /// <summary>
+        /// 配置可访问依赖结果的执行委托。
+        /// </summary>
+        public WorkJob Work(Func<WorkJobExecutionContext, Task<object>> func)
+        {
+            _funcWithContext = func ?? throw new ArgumentNullException(nameof(func));
+            _funcWithParam = null;
             _funcWithoutParam = null;
             return this;
         }
@@ -190,6 +212,7 @@ namespace AsyncTool.Jobs
         public WorkJob Work(Func<Task<object>> func)
         {
             _funcWithoutParam = func ?? throw new ArgumentNullException(nameof(func));
+            _funcWithContext = null;
             _funcWithParam = null;
             return this;
         }
@@ -358,7 +381,20 @@ namespace AsyncTool.Jobs
                 {
                     _result = null;
 
-                    if (_funcWithParam != null)
+                    if (_funcWithContext != null)
+                    {
+                        var context = BuildExecutionContext();
+
+                        if (!_timeout.HasValue || _timeout < 0)
+                        {
+                            _result = await _funcWithContext(context).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            _result = await ExecuteJobTimeoutAsync(_funcWithContext, _timeout.Value, context).ConfigureAwait(false);
+                        }
+                    }
+                    else if (_funcWithParam != null)
                     {
                         var param = _param ?? new object();
 
@@ -423,6 +459,38 @@ namespace AsyncTool.Jobs
             options?.OnJobFailed?.Invoke(this, failure);
         }
 
+        private WorkJobExecutionContext BuildExecutionContext()
+        {
+            if (_dependsOnWorkJobs.Count == 0 || string.IsNullOrWhiteSpace(_asId))
+            {
+                return WorkJobExecutionContext.Create(_param, null, null);
+            }
+
+            var dependencyMap = new Dictionary<string, object>(_dependsOnWorkJobs.Count);
+            var dependencyValues = new List<object>(_dependsOnWorkJobs.Count);
+
+            foreach (var dependency in _dependsOnWorkJobs)
+            {
+                if (string.IsNullOrWhiteSpace(dependency.WorkJobId))
+                {
+                    continue;
+                }
+
+                var key = AsyncUtil.GenerateId(_asId!, dependency.WorkJobId!);
+                var value = WorkJobResult.GetResult(key);
+
+                if (value == null)
+                {
+                    continue;
+                }
+
+                dependencyMap[dependency.WorkJobId!] = value;
+                dependencyValues.Add(value);
+            }
+
+            return WorkJobExecutionContext.Create(_param, dependencyMap, dependencyValues);
+        }
+
         /// <summary>
         /// 将失败状态向下游任务传播。
         /// </summary>
@@ -439,9 +507,26 @@ namespace AsyncTool.Jobs
         /// </summary>
         private void SaveResult(object? value)
         {
-            if (!string.IsNullOrEmpty(_asId) && !string.IsNullOrEmpty(_workJobId) && value != null)
+            if (!string.IsNullOrEmpty(_asId) && !string.IsNullOrEmpty(_workJobId))
             {
                 WorkJobResult.AddResult(AsyncUtil.GenerateId(_asId!, _workJobId!), value);
+            }
+        }
+
+        /// <summary>
+        /// 执行访问上下文的委托并应用超时限制。
+        /// </summary>
+        private static async Task<object> ExecuteJobTimeoutAsync(Func<WorkJobExecutionContext, Task<object>> func, int timeout, WorkJobExecutionContext context)
+        {
+            using var cts = new CancellationTokenSource(timeout);
+
+            try
+            {
+                return await func(context).WaitAsync(cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex) when (cts.IsCancellationRequested)
+            {
+                throw new TimeoutException("Job execution timed out", ex);
             }
         }
 

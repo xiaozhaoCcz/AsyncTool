@@ -63,9 +63,16 @@ var loadOrders = WorkJob.CreateBuilder()
 var mergeData = WorkJob.CreateBuilder()
     .WithId("merge-data")
     .WithPriority(70)
-    .WithWork(async () =>
+    .WithWork(async context =>
     {
+        context.TryGetDependencyResult("load-users", out var usersResult);
+        context.TryGetDependencyResult("load-orders", out var ordersResult);
+
         Console.WriteLine("[merge-data] 开始数据合并...");
+        var usersSummary = usersResult?.ToString() ?? "null";
+        var ordersSummary = ordersResult?.ToString() ?? "null";
+        Console.WriteLine($"[merge-data] 依赖结果 -> load-users: {usersSummary}, load-orders: {ordersSummary}");
+
         for (var stage = 1; stage <= 3; stage++)
         {
             await Task.Delay(90);
@@ -73,7 +80,7 @@ var mergeData = WorkJob.CreateBuilder()
         }
 
         Console.WriteLine("[merge-data] 数据合并完成");
-        return (object)"merged:ok";
+        return (object)$"merged:{usersSummary}+{ordersSummary}";
     })
     .Build();
 
